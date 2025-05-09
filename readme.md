@@ -2,7 +2,7 @@
 
 # 🧠 How the **DocuVerify** System Works
 
-The **DocuVerify** system is a comprehensive web application designed to detect **plagiarism** and **AI-generated content** in uploaded documents.
+The **DocuVerify** system is a comprehensive web application, build in React and Django and it is designed to detect **plagiarism** and **AI-generated content** in uploaded documents.
 
 Below is a detailed explanation of how the system works—from account creation to document analysis—including logic behind detection and the React-based frontend.
 
