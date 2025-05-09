@@ -18,7 +18,7 @@ Below is a detailed explanation of how the system works—from account creation 
 * A form collects user info (e.g., email, password) and calls:
 
   ```ts
-  registerUser() // in /frontend2/src/lib/api.ts
+  registerUser() // in /frontend/src/lib/api.ts
   ```
 * Backend responses (success/error) are shown using **toast** notifications.
 
@@ -37,7 +37,7 @@ Below is a detailed explanation of how the system works—from account creation 
 * Credentials are sent via:
 
   ```ts
-  loginUser() // in /frontend2/src/lib/api.ts
+  loginUser() // in /frontend/src/lib/api.ts
   ```
 * Access & refresh tokens are stored in `localStorage`.
 
@@ -50,7 +50,7 @@ Below is a detailed explanation of how the system works—from account creation 
 
 ### 🧭 Session Management
 
-* Uses Axios **interceptors** in `/frontend2/src/lib/api.ts` to handle expired tokens.
+* Uses Axios **interceptors** in `/frontend/src/lib/api.ts` to handle expired tokens.
 * If a token is invalid → redirect to login.
 
 ---
@@ -64,13 +64,13 @@ Below is a detailed explanation of how the system works—from account creation 
 * Upload via `DocumentUpload` component:
 
   ```tsx
-  /frontend2/src/components/DocumentUpload.tsx
+  /frontend/src/components/DocumentUpload.tsx
   ```
 * Supported formats: `.pdf`, `.docx`, `.doc`, `.txt`
 * Sent to backend via:
 
   ```ts
-  analyzeDocument() // in /frontend2/src/lib/api.ts
+  analyzeDocument() // in /frontend/src/lib/api.ts
   ```
 
 **Backend**
@@ -223,7 +223,7 @@ check_ai_probability() // in /documents/utils.py
 * Handled by:
 
   ```ts
-  logoutUser() // in /frontend2/src/lib/api.ts
+  logoutUser() // in /frontend/src/lib/api.ts
   ```
 * Clears tokens and redirects to `/login`.
 
