@@ -1,10 +1,10 @@
-name: Django CI
+name: Docuverify Core Tests
 
 on:
   push:
-    branches: [ "main","statgin" ]
+    branches: [ "main", "staging" ]
   pull_request:
-    branches: [ "main","testing" ]
+    branches: [ "main", "testing" ]
 
 jobs:
   build:
