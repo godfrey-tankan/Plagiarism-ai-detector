@@ -114,7 +114,7 @@ If your backend API URL differs or you want to use environment variables, make s
 
 Once both servers are running:
 
-* **Frontend**: [http://localhost:5173](http://localhost:8080)
+* **Frontend**: [http://localhost:8080](http://localhost:8080)
 * **Backend API**: [http://127.0.0.1:8000/api/](http://127.0.0.1:8000/api/)
 
 ---
