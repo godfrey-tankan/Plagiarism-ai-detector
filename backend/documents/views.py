@@ -5,8 +5,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 
-from .models import Document
-from .serializers import DocumentSerializer
+from .models import Document, DocumentHistory
+from .serializers import DocumentSerializer, DocumentHistorySerializer
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 
@@ -112,6 +112,16 @@ class AnalyzeDocumentView(APIView):
                     file=file,
                     **stats
                 )
+            try:
+                DocumentHistory.objects.create(
+                    document=doc,
+                    content=doc.content,
+                    plagiarism_score=doc.plagiarism_score,
+                    ai_score=doc.ai_score,
+                    highlights=doc.highlights 
+                )
+            except Exception as e:
+                logger.error(f"Failed to create DocumentHistory: {e}")
 
             # 8. response (exact same shape you had)
             result = {
@@ -177,3 +187,13 @@ class DocumentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='test-csrf')
     def test_csrf(self, request):
         return Response({"message": "CSRF exemption works!"}, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UserDocumentHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        histories = DocumentHistory.objects.filter(document__user=request.user).select_related('document')
+        serializer = DocumentHistorySerializer(histories, many=True)
+        return Response(serializer.data)

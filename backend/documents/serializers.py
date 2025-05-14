@@ -1,6 +1,7 @@
 # documents/serializers.py
 from rest_framework import serializers
-from .models import Document
+from .models import Document, DocumentHistory
+from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 
 class DocumentStatsSerializer(serializers.Serializer):
@@ -43,3 +44,8 @@ class DocumentSerializer(serializers.ModelSerializer):
         if obj.file:
             return obj.file.name.split('.')[-1].lower()
         return 'unknown'
+    
+class DocumentHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentHistory
+        fields = ['id', 'document', 'created_at', 'plagiarism_score', 'ai_score', 'highlights']

@@ -15,7 +15,7 @@ export const backendAPI = (data) => api.get('documents/test-csrf/', data)
 // Auth API
 export const registerUser = (data) => api.post('auth/register/', data)
 export const loginUser = (data) => api.post('auth/login/', data)
-
+export const documentHistory = (data) => api.get('documents/history/', data)
 // Add interceptors for JWT handling
 api.interceptors.response.use(
   response => response,

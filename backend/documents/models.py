@@ -20,3 +20,16 @@ class Document(models.Model):
     @property
     def highlights(self):
         return self._highlights
+
+class DocumentHistory(models.Model):
+    document = models.ForeignKey(Document, on_delete=models.CASCADE)
+    content = models.TextField()
+    plagiarism_score = models.FloatField()
+    ai_score = models.FloatField()
+    highlights = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+    def __str__(self):
+        return f"DocumentHistory for {self.document.id} at {self.created_at}"

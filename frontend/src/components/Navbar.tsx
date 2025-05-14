@@ -20,7 +20,7 @@ const Navbar = () => {
           <div className="hidden md:flex items-center space-x-6">
             <a href="#" className="text-gray-600 hover:text-teal-600 transition-colors">Home</a>
             <a href="#" className="text-gray-600 hover:text-teal-600 transition-colors">Dashboard</a>
-            <a href="#" className="text-gray-600 hover:text-teal-600 transition-colors">History</a>
+            <a href="/history" className="text-gray-600 hover:text-teal-600 transition-colors">History</a>
             <a href="#" className="text-gray-600 hover:text-teal-600 transition-colors">About</a>
           </div>
         )}
@@ -52,7 +52,7 @@ const Navbar = () => {
 
               {/* <Button variant="outline" className="border-teal-600 text-teal-600 hover:bg-teal-50"
               > */}
-                {/* <Link to="/signup" className="text-teal-600 hover:text-teal-700 font-medium">
+              {/* <Link to="/signup" className="text-teal-600 hover:text-teal-700 font-medium">
                   Signup
                 </Link> */}
               {/* </Button> */}

@@ -10,3 +10,13 @@ class CustomUser(AbstractUser):
     
     def __str__(self):
         return self.email
+class UserActivity(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    last_login = models.DateTimeField(auto_now=True)
+    last_activity = models.DateTimeField(auto_now=True)
+    activity = models.TextField()
+    class Meta:
+        ordering = ['-last_activity']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.last_activity}"
