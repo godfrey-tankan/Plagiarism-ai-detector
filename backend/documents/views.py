@@ -75,6 +75,23 @@ class AnalyzeDocumentView(APIView):
             highlights = plag['highlights'] + ai['highlights']
 
             if existing:
+                if existing.user != request.user and not request.user.is_superuser:
+                    result = {
+                        'id': existing.id,
+                        'fileUrl': existing.file.url,
+                        'plagiarismScore': 100.0,
+                        'aiScore': existing.ai_score,
+                        'originalScore': 0.0,
+                        'documentStats': {
+                            'wordCount': existing.word_count,
+                            'characterCount': existing.character_count,
+                            'pageCount': existing.page_count,
+                            'readingTime': existing.reading_time
+                        },
+                        'highlights': existing.highlights
+                    }
+                    return Response(result, status=status.HTTP_200_OK)
+                    return Response({"error": "Document already exists"}, status=400)
                 existing.plagiarism_score = p_score
                 existing.ai_score = ai_score
                 existing._highlights = highlights
