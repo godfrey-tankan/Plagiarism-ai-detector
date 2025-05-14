@@ -11,7 +11,8 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
+  Cell
 } from 'recharts';
 import {
   Tabs,
@@ -64,15 +65,19 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
   const chartData = [
     {
       name: 'Original',
-      value: 100 - (safeAnalysis.plagiarismScore + safeAnalysis.aiScore)
+      value: 100 - (safeAnalysis.plagiarismScore + safeAnalysis.aiScore),
+      fill: 'oklch(59.6% 0.145 163.225)'
     },
     {
       name: 'Plagiarized',
-      value: safeAnalysis.plagiarismScore
+      value: safeAnalysis.plagiarismScore,
+      fill: '#EF4444'
+
     },
     {
       name: 'AI Generated',
-      value: safeAnalysis.aiScore
+      value: safeAnalysis.aiScore,
+      fill: 'oklch(60% 0.15 270)'
     }
   ];
 
@@ -167,7 +172,12 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
                     <XAxis dataKey="name" />
                     <YAxis />
                     <Tooltip />
-                    <Bar dataKey="value" fill="oklch(59.6% 0.145 163.225)" />
+                    <Bar dataKey="value">
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+
                   </BarChart>
                 </ResponsiveContainer>
               </div>
