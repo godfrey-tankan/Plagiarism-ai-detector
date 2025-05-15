@@ -46,6 +46,11 @@ class DocumentSerializer(serializers.ModelSerializer):
         return 'unknown'
     
 class DocumentHistorySerializer(serializers.ModelSerializer):
+    document_name = serializers.SerializerMethodField()
     class Meta:
         model = DocumentHistory
-        fields = ['id', 'document', 'created_at', 'plagiarism_score', 'ai_score', 'highlights']
+        fields = ['id', 'document', 'created_at', 'plagiarism_score', 'ai_score', 'highlights', 'document_name']
+    def get_document_name(self, obj):
+        if obj.document:
+            return obj.document.file.url.split("/")[-1]
+        return None
