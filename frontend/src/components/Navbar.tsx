@@ -18,8 +18,7 @@ const Navbar = () => {
         {isAuthenticated && (
 
           <div className="hidden md:flex items-center space-x-6">
-            <a href="#" className="text-gray-600 hover:text-teal-600 transition-colors">Home</a>
-            <a href="#" className="text-gray-600 hover:text-teal-600 transition-colors">Dashboard</a>
+            <a href="/dashboard" className="text-gray-600 hover:text-teal-600 transition-colors">Home</a>
             <a href="/history" className="text-gray-600 hover:text-teal-600 transition-colors">History</a>
             <a href="#" className="text-gray-600 hover:text-teal-600 transition-colors">About</a>
           </div>
