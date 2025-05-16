@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
-
 const Hero = () => {
+  const userType = localStorage.getItem('user_type');
   return (
     <div className="bg-gradient-to-r from-white-600 to-teal-700 text-black py-16">
       <div className="container mx-auto px-6 flex flex-col md:flex-row items-center">
@@ -10,14 +10,20 @@ const Hero = () => {
             Detect Plagiarism & AI Content with Precision
           </h1>
           <p className="leading-normal text-xl mb-8">
-            Our advanced analysis tools help you identify plagiarized content and AI-generated text with industry-leading accuracy.
+            {
+              userType === 'student'
+                ? "View your document metrics and ensure originality with our advanced detection tools."
+                : "Docuverify empowers you to analyze documents for plagiarism and AI-generated content, ensuring authenticity and integrity."
+
+
+            }
           </p>
           <div className="flex flex-col sm:flex-row justify-center md:justify-start w-full">
             <Button
               className="py-6 px-8 bg-teal-700 text-white hover:bg-teal-600 rounded-lg font-bold mb-4 sm:mb-0 sm:mr-4"
               onClick={() => document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth' })}
             >
-              Analyze Document
+              {userType !== 'student' ? 'Upload Document' : 'View Document Metrics'}
             </Button>
             <Button
               className="py-6 px-8 bg-teal-700 text-white hover:bg-teal-600 rounded-lg font-bold mb-4 sm:mb-0 sm:mr-4"

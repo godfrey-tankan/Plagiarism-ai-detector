@@ -8,6 +8,7 @@ const api = axios.create({
 export function logoutUser() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
+  localStorage.removeItem('user_type')
   window.location.href = '/login'
 
 };

@@ -16,6 +16,7 @@ const Index = () => {
   const [analysisResult, setAnalysisResult] = useState<DocumentAnalysis | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const userType = localStorage.getItem('user_type');
 
   useEffect(() => {
     const isAuthenticated = localStorage.getItem('access_token') !== null;
@@ -87,10 +88,22 @@ const Index = () => {
       <main className="flex-grow py-12">
         <div className="container mx-auto px-6 space-y-8">
           <div className="max-w-3xl mx-auto">
-            <DocumentUpload
-              onAnalyze={handleAnalyzeDocument}
-              isAnalyzing={isAnalyzing}
-            />
+            {userType !== 'student' && (
+
+              <DocumentUpload
+                onAnalyze={handleAnalyzeDocument}
+                isAnalyzing={isAnalyzing}
+              />
+            )}
+            {userType === 'student' && (
+              <div className="p-8 text-center bg-white rounded-xl shadow-lg">
+                <h3 className="text-xl font-medium text-teal-700 mb-3">Document Upload Disabled</h3>
+                <p className="text-gray-600">As a student, you cannot upload documents for analysis, You can only view your document metrics, If your
+                  supervisor has uploaded a document for you, you can view it here.</p>
+                <p className="text-gray-400">Please contact your supervisor for more information.</p>
+                <p className="text-gray-350">If you are a supervisor, please log in with your supervisor account to upload documents.</p>
+              </div>
+            )}
           </div>
 
           {analysisResult && !isAnalyzing && (
@@ -111,7 +124,7 @@ const Index = () => {
             </div>
           )}
 
-          {!analysisResult && !isAnalyzing && (
+          {!analysisResult && !isAnalyzing && userType !== "student" && (
             <div className="mt-12 p-8 text-center bg-white rounded-xl shadow-lg max-w-3xl mx-auto">
               <h3 className="text-xl font-medium text-teal-700 mb-3">Ready to Analyze Your Document?</h3>
               <p className="text-gray-600">Upload a file above to check for plagiarism and AI-generated content.</p>

@@ -30,12 +30,24 @@ const LoginForm = () => {
       if (response.data.access && response.data.refresh) {
         localStorage.setItem('access_token', response.data.access);
         localStorage.setItem('refresh_token', response.data.refresh);
+        localStorage.setItem('user_type', response.data.user_type);
 
         toast({
           title: "Login Successful",
           description: "Welcome back!",
         });
-
+        // if (response.data.user_type === 'supervisor') {
+        //   navigate('/dashboard');
+        //   return; // Important to return here to prevent further execution
+        // }
+        // if (response.data.user_type === 'student') {
+        //   navigate('/student-dashboard');
+        //   return; // Important to return here to prevent further execution
+        // }
+        // if (response.data.user_type === 'admin') {
+        //   navigate('/admin-dashboard');
+        //   return; // Important to return here to prevent further execution
+        // }
         navigate('/dashboard');
         return; // Important to return here to prevent further execution
       }

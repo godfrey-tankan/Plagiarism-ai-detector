@@ -39,6 +39,8 @@ class LoginView(BaseView):
                 return Response({
                     'refresh': str(refresh),
                     'access': str(refresh.access_token),
+                    'user_type': user.user_type,
+                    'is_admin': user.is_admin,
                 })
             return Response({'error': 'Invalid credentials'}, status=401)
         return Response(serializer.errors, status=400)
