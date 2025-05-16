@@ -100,8 +100,8 @@ const Index = () => {
                 <h3 className="text-xl font-medium text-teal-700 mb-3">Document Upload Disabled</h3>
                 <p className="text-gray-600">As a student, you cannot upload documents for analysis, You can only view your document metrics, If your
                   supervisor has uploaded a document for you, you can view it here.</p>
-                <p className="text-gray-400">Please contact your supervisor for more information.</p>
-                <p className="text-gray-350">If you are a supervisor, please log in with your supervisor account to upload documents.</p>
+                <p className="text-gray-500">Please contact your <a className="text-teal-500" href="/supervisors">supervisor</a>  for more information.</p>
+                <p className="text-gray-400">If you are a supervisor, please log in with your supervisor account to upload documents.</p>
               </div>
             )}
           </div>
