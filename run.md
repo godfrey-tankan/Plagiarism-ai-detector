@@ -133,5 +133,12 @@ python manage.py createsuperuser
 python manage.py collectstatic
 ```
 
+Additionals:
+pip install nltk numpy
+<!-- python -c "import nltk; nltk.download('punkt')" -->
+python -c "import nltk; nltk.download('punkt_tab')"
+pip install --upgrade transformers
+pip install sentencepiece tokenizers
+
 ---
 

@@ -1,9 +1,7 @@
-import { useState, useEffect } from 'react';
-import { DocumentAnalysis } from '@/types/analysis';
+import { useState, useEffect, useCallback } from 'react';
+import { DocumentAnalysis, Highlight } from '@/types/analysis'; // Ensure Highlight is imported
 import * as mammoth from 'mammoth';
-import { Viewer, SpecialZoomLevel, PdfJs } from '@react-pdf-viewer/core';
-import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
-import { GlobalWorkerOptions } from 'pdfjs-dist';
+
 import {
   BarChart,
   Bar,
@@ -21,25 +19,55 @@ import {
   TabsTrigger
 } from '@/components/ui/tabs';
 
-// GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+// Tooltip component (can be a separate file, but inline for example)
+const TextHighlightTooltip = ({
+  content,
+  isVisible,
+  position
+}: {
+  content: string;
+  isVisible: boolean;
+  position: { x: number; y: number };
+}) => {
+  if (!isVisible) return null;
 
-// Import PDF viewer styles
-import '@react-pdf-viewer/core/lib/styles/index.css';
-import '@react-pdf-viewer/default-layout/lib/styles/index.css';
+  return (
+    <div
+      style={{
+        position: 'fixed', // Use fixed to position relative to viewport
+        left: position.x + 10, // Offset from cursor
+        top: position.y + 10,
+        zIndex: 100,
+        pointerEvents: 'none', // Allow clicks/hovers to pass through
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        color: 'white',
+        padding: '6px 10px',
+        borderRadius: '4px',
+        fontSize: '0.85rem',
+        maxWidth: '200px',
+        wordWrap: 'break-word',
+      }}
+    >
+      {content}
+    </div>
+  );
+};
+
 
 const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
   const [activeTab, setActiveTab] = useState('stats');
-  const [docContent, setDocContent] = useState<string>('');
   const [loadingDoc, setLoadingDoc] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
-  const [pdfError, setPdfError] = useState<string | null>(null);
-  const defaultLayoutPluginInstance = defaultLayoutPlugin();
 
-  // Default values for safe analysis
+  // Tooltip state
+  const [tooltipContent, setTooltipContent] = useState('');
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+
   const safeAnalysis = analysis || {
     plagiarismScore: 0,
     aiScore: 0,
+    originalScore: 0,
     documentStats: {
       wordCount: 0,
       characterCount: 0,
@@ -50,45 +78,114 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
     fileUrl: '',
     content: ''
   };
-  const normalizeUrl = (url: string) => {
-    // Handle relative paths from Django
-    if (url.startsWith('/media/')) {
-      return `${window.location.origin}${url}`;
-    }
-    return url;
-  };
 
-  // File type detection
   const fileExtension = safeAnalysis.fileUrl?.split('.').pop()?.toLowerCase();
-  const isPdf = fileExtension === 'pdf';
   const isWordDoc = ['doc', 'docx'].includes(fileExtension || '');
+
   const chartData = [
     {
       name: 'Original',
-      value: 100 - (safeAnalysis.plagiarismScore + safeAnalysis.aiScore),
+      value: (100 - (safeAnalysis.plagiarismScore + safeAnalysis.aiScore)).toFixed(1),
       fill: 'oklch(59.6% 0.145 163.225)'
     },
     {
       name: 'Plagiarized',
-      value: safeAnalysis.plagiarismScore,
+      value: safeAnalysis.plagiarismScore.toFixed(1),
       fill: '#EF4444'
-
     },
     {
       name: 'AI Generated',
-      value: safeAnalysis.aiScore,
+      value: safeAnalysis.aiScore.toFixed(1),
       fill: 'oklch(60% 0.15 270)'
     }
   ];
 
+  const handleMouseEnterHighlight = useCallback((e: React.MouseEvent, highlight: Highlight) => {
+    setTooltipContent(`${highlight.type === 'ai' ? 'AI Generated' : 'Plagiarized'}: ${highlight.confidence.toFixed(1)}% Confidence`);
+    setTooltipPosition({ x: e.clientX, y: e.clientY });
+    setTooltipVisible(true);
+  }, []);
 
-  // Document loading handler
+  const handleMouseLeaveHighlight = useCallback(() => {
+    setTooltipVisible(false);
+  }, []);
+
+  // Function to render text with highlights and tooltips
+  const renderHighlightedText = useCallback((text: string, highlights: DocumentAnalysis['highlights']) => {
+    if (!text) return null;
+
+    const sortedHighlights = highlights
+      .map(h => ({
+        ...h,
+        charStart: Math.floor(h.position.x / 100 * text.length),
+        charEnd: Math.floor((h.position.x + h.position.width) / 100 * text.length)
+      }))
+      .sort((a, b) => a.charStart - b.charStart);
+
+    const elements: JSX.Element[] = [];
+    let lastIndex = 0;
+
+    sortedHighlights.forEach((highlight, index) => {
+      // Clamp highlight indices to text length
+      const charStart = Math.max(0, Math.min(text.length, highlight.charStart));
+      const charEnd = Math.max(0, Math.min(text.length, highlight.charEnd));
+
+      // Add text before the current highlight
+      if (charStart > lastIndex) {
+        elements.push(
+          <span key={`text-pre-${index}`}>
+            {text.substring(lastIndex, charStart)}
+          </span>
+        );
+      }
+
+      // Add the highlighted text with mouse handlers
+      const highlightText = text.substring(charStart, charEnd);
+      const highlightClass = highlight.type === 'plagiarism'
+        ? 'bg-red-200'
+        : highlight.type === 'ai'
+          ? 'bg-yellow-200'
+          : '';
+
+      elements.push(
+        <span
+          key={`highlight-${index}`}
+          className={`${highlightClass} relative cursor-help`} // Add cursor-help for visual cue
+          onMouseEnter={(e) => handleMouseEnterHighlight(e, highlight)}
+          onMouseLeave={handleMouseLeaveHighlight}
+        >
+          {highlightText}
+        </span>
+      );
+
+      lastIndex = charEnd;
+    });
+
+    if (lastIndex < text.length) {
+      elements.push(
+        <span key={`text-post-${sortedHighlights.length}`}>
+          {text.substring(lastIndex)}
+        </span>
+      );
+    }
+
+    return (
+      <pre className="whitespace-pre-wrap font-sans text-sm p-4 leading-relaxed">
+        {elements}
+      </pre>
+    );
+  }, [handleMouseEnterHighlight, handleMouseLeaveHighlight]); // Add dependencies for useCallback
+
+
   const loadDocumentContent = async () => {
+    if (safeAnalysis.content) {
+      setLoadingDoc(false);
+      return;
+    }
     if (!safeAnalysis.fileUrl) return;
 
     setLoadingDoc(true);
     setDocError(null);
-    setPdfError(null);
 
     try {
       if (isWordDoc) {
@@ -96,7 +193,6 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
         if (!response.ok) throw new Error('Failed to fetch document');
         const arrayBuffer = await response.arrayBuffer();
         const result = await mammoth.convertToHtml({ arrayBuffer });
-        setDocContent(result.value);
       }
     } catch (error) {
       console.error('Document load error:', error);
@@ -108,27 +204,14 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
 
   useEffect(() => {
     let isMounted = true;
-    if (activeTab === 'text' && safeAnalysis.fileUrl) {
+    if (activeTab === 'text' && (safeAnalysis.fileUrl || safeAnalysis.content)) {
       loadDocumentContent();
     }
     return () => {
       isMounted = false;
     };
-  }, [activeTab, safeAnalysis.fileUrl]);
+  }, [activeTab, safeAnalysis.fileUrl, safeAnalysis.content, loadDocumentContent]);
 
-  const handlePdfError = (error: Error) => {
-    console.error('PDF Error:', error);
-    setPdfError(error.message);
-  };
-
-  const validatePdfUrl = (url: string) => {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol.startsWith('http');
-    } catch {
-      return false;
-    }
-  };
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 space-y-8">
@@ -138,14 +221,13 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
           <TabsTrigger value="text">Document View</TabsTrigger>
         </TabsList>
 
-
-        {/* Statistics Tab */}
         <TabsContent value="stats">
+          {/* Statistics Tab content remains the same */}
           <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard
                 title="Original Content"
-                value={`${(100 - (safeAnalysis.plagiarismScore + safeAnalysis.aiScore)).toFixed(2)}%`}
+                value={`${(safeAnalysis.originalScore).toFixed(2)}%`}
                 colorClass="text-green-600"
                 description="Unique content percentage"
               />
@@ -170,14 +252,13 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
                   <BarChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
-                    <YAxis />
+                    <YAxis domain={[0, 100]} />
                     <Tooltip />
                     <Bar dataKey="value">
                       {chartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.fill} />
                       ))}
                     </Bar>
-
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -191,7 +272,7 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
                   ]}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
-                    <YAxis />
+                    <YAxis domain={[0, 100]} />
                     <Tooltip />
                     <Bar dataKey="score" fill="#EF4444" />
                   </BarChart>
@@ -224,88 +305,36 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
           </div>
         </TabsContent>
 
-        {/* Document View Tab */}
-        {/* Document View Tab */}
         <TabsContent value="text">
           <div className="space-y-4">
-            {safeAnalysis.fileUrl ? (
-              <>
-                {isPdf && (
-                  <div className="h-[800px] relative">
-                    {validatePdfUrl(safeAnalysis.fileUrl) && (
-                      <Viewer
-                        fileUrl={normalizeUrl(safeAnalysis.fileUrl)}
-                        plugins={[defaultLayoutPluginInstance]}
-                        defaultScale={SpecialZoomLevel.PageFit}
-                        httpHeaders={{
-                          'Accept-Ranges': 'bytes',
-                          'Cache-Control': 'no-cache',
-                          'Access-Control-Allow-Origin': '*' // Explicit CORS header
-                        }}
-                        renderLoader={() => (
-                          <div className="p-4 bg-blue-50 text-blue-600">
-                            Loading PDF document...
-                          </div>
-                        )}
-                        renderError={(error) => {
-                          console.error('PDF Render Error:', error);
-                          return (
-                            <div className="p-4 bg-red-50 text-red-600">
-                              PDF Error: {error.message}. Please check:
-                              <ul className="list-disc pl-6 mt-2">
-                                <li>File URL is accessible</li>
-                                <li>No browser extensions blocking PDFs</li>
-                                <li>Valid PDF format</li>
-                              </ul>
-                            </div>
-                          );
-                        }}
-                      />
-                    )}
-                  </div>
-                )}
-
-                {isWordDoc && (
-                  <div className="border rounded-lg p-4 min-h-[800px]">
-                    {loadingDoc && <p className="text-gray-500">Loading document...</p>}
-                    {docError && (
-                      <div className="text-red-500 p-4 bg-red-50 rounded-lg">
-                        {docError}
-                      </div>
-                    )}
-                    {!loadingDoc && !docError && (
-                      <div
-                        className="prose max-w-none"
-                        dangerouslySetInnerHTML={{ __html: docContent }}
-                      />
-                    )}
-                    {!docContent && !loadingDoc && !docError && (
-                      <iframe
-                        src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(safeAnalysis.fileUrl)}`}
-                        width="100%"
-                        height="800px"
-                        frameBorder="0"
-                        className="border rounded-lg"
-                        title="Document preview"
-                      />
-                    )}
-                  </div>
-                )}
-
-                {!isPdf && !isWordDoc && (
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-gray-500">
-                      Preview not available for .{fileExtension} files
-                    </p>
-                  </div>
-                )}
-              </>
+            {loadingDoc && <p className="text-gray-500">Loading document content...</p>}
+            {docError && (
+              <div className="text-red-500 p-4 bg-red-50 rounded-lg">
+                {docError}
+              </div>
+            )}
+            {!loadingDoc && !docError && safeAnalysis.content ? (
+              <div
+                className="border rounded-lg min-h-[400px] max-h-[80vh] overflow-y-auto" // Added max-h and overflow-y-auto
+                style={{ resize: 'vertical' }} // Optional: Allow user to resize height
+              >
+                {renderHighlightedText(safeAnalysis.content, safeAnalysis.highlights)}
+              </div>
             ) : (
               <div className="p-4 bg-gray-50 rounded-lg">
-                <p className="text-gray-500">No document preview available</p>
+                <p className="text-gray-500">No document content available for display or highlighting.</p>
+                <p className="text-gray-500 mt-2">
+                  Please ensure the document file is valid and the backend returns its `content`.
+                </p>
               </div>
             )}
           </div>
+          {/* Tooltip component */}
+          <TextHighlightTooltip
+            content={tooltipContent}
+            isVisible={tooltipVisible}
+            position={tooltipPosition}
+          />
         </TabsContent>
       </Tabs>
     </div>

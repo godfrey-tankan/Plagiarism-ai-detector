@@ -42,6 +42,7 @@ export interface DocumentAnalysis {
     aiGeneratedContent: number;
   };
   plagiarismScore: number;
+  originalScore: number;
   aiScore: number;
   documentStats: DocumentStats;
   sourcesDetected: SourceMatch[];
@@ -66,4 +67,6 @@ export interface HighlightPosition {
 export interface Highlight {
   type: 'plagiarism' | 'ai';
   position: HighlightPosition;
+  confidence: number;
 }
+

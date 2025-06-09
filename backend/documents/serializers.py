@@ -29,28 +29,48 @@ class TextAnalysisSerializer(serializers.Serializer):
 class DocumentSerializer(serializers.ModelSerializer):
     fileUrl = serializers.SerializerMethodField()
     highlights = serializers.SerializerMethodField()
+    original_score = serializers.SerializerMethodField()
+    documentStats = DocumentStatsSerializer(source='*', read_only=True)
+
 
     class Meta:
         model = Document
-        fields = '__all__'
+        fields = [
+            'id', 'fileUrl', 'content', 'plagiarism_score', 'ai_score',
+            'original_score', 'documentStats', 'highlights'
+        ]
+        read_only_fields = ['user', 'content_hash', 'content']
 
-    def get_file_url(self, obj):
+
+    def get_fileUrl(self, obj):
         request = self.context.get('request')
         if obj.file:
-            return request.build_absolute_uri(obj.file.url)
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
         return None
 
     def get_format(self, obj):
         if obj.file:
             return obj.file.name.split('.')[-1].lower()
         return 'unknown'
-    
+
+    def get_highlights(self, obj):
+        return obj.highlights
+
+    def get_original_score(self, obj):
+        return round(max(0.0, 100.0 - (obj.plagiarism_score + obj.ai_score)), 1)
+
+
 class DocumentHistorySerializer(serializers.ModelSerializer):
+    document = DocumentSerializer(read_only=True)
     document_name = serializers.SerializerMethodField()
+
     class Meta:
         model = DocumentHistory
-        fields = ['id', 'document', 'created_at', 'plagiarism_score', 'ai_score', 'highlights', 'document_name']
+        fields = ['id', 'document', 'created_at', 'plagiarism_score', 'ai_score', 'highlights', 'content', 'document_name']
+
     def get_document_name(self, obj):
-        if obj.document:
-            return obj.document.file.url.split("/")[-1]
+        if obj.document and obj.document.file:
+            return obj.document.file.name.split("/")[-1]
         return None

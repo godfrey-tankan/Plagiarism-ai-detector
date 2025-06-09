@@ -25,7 +25,8 @@ ALLOWED_HOSTS=[
     'localhost',
     'docuverify.onrender.com',
     'plagiarism-ai-detector-nine.vercel.app',
-    '192.168.0.196',   
+    '192.168.0.196',
+    '127.0.0.1'   
     ]
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -107,6 +108,46 @@ DATABASES = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
+}
+# settings.py
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {name} {message}', 
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'DEBUG', 
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'loggers': {
+        '': { 
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'documents': { 
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'transformers': { 
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
 }
 
 
