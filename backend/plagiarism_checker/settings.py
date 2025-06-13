@@ -19,6 +19,9 @@ load_dotenv()
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG') == 'True'
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+if not GEMINI_API_KEY:
+    print("\033[91mWarning: GEMINI_API_KEY is not set. Please set it in your .env file.\033[0m")
 # ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS')
 ALLOWED_HOSTS=[
     'docuverify.onrender.com',
@@ -85,7 +88,7 @@ CORS_ALLOW_CREDENTIALS = True
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')], 
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -200,8 +203,17 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
-
+FRONTEND_URL = 'https://plagiarism-ai-detector-nine.vercel.app' 
 USE_TZ = True
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com' 
+EMAIL_PORT = 587 
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'godfreytantswakandeya@gmail.com' # Replace with your email
+EMAIL_HOST_PASSWORD = 'houb kgzh hpiz jsgr' # Replace with your email password or app password
+DEFAULT_FROM_EMAIL = 'no-reply@docuverify.com' # Email address that sends the report
+
 
 
 # Static files (CSS, JavaScript, Images)

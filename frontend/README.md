@@ -128,6 +128,7 @@ Finally, all analysis results are securely stored and organized:
     ```
 4.  **Download NLTK Data:**
     ```bash
+    pip install google-generativeai
     python -c "import nltk; nltk.download('punkt')"
     python -c "import nltk; nltk.download('punkt_tab')" # Essential for advanced sentence tokenization
     ```

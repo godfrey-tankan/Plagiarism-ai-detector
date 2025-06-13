@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Your Document Analysis Report</title>
+</head>
+<body>
+    <p>Dear Valued User,</p>
+    
+    <p>Your document, "{{ document.title|default:"N/A" }}", has been successfully analyzed. Here is a summary of the report for this analysis run:</p>
+    
+    <p><strong>Document Code:</strong> <strong>{{ document.document_code }}</strong></p>
+    <p><strong>Analysis Date:</strong> {{ history_record.created_at|date:"F j, Y, H:i" }}</p>
+    
+    <h3>Analysis Summary:</h3>
+    <ul>
+        <li><strong>Word Count:</strong> {{ history_record.word_count }}</li>
+        <li><strong>Character Count:</strong> {{ history_record.character_count }}</li>
+        <li><strong>Estimated Reading Time:</strong> {{ history_record.reading_time }} minutes</li>
+        <li><strong>Estimated Pages:</strong> {{ history_record.page_count }}</li>
+    </ul>
+
+    <h3>Originality Scores:</h3>
+    <ul>
+        <li><strong>Plagiarism Detected:</strong> {{ history_record.plagiarism_score }}%</li>
+        <li><strong>AI Generated Content:</strong> {{ history_record.ai_score }}%</li>
+        <li><strong>Originality Score:</strong> {{ history_record.originality_score }}%</li>
+    </ul>
+
+    <p>To view your full document history and detailed report on our website, please use the following document code:</p>
+    <p><strong>Document Code: {{ document.document_code }}</strong></p>
+
+    <p>You can check the document history by visiting: <a href="{{ analysis_url }}">{{ analysis_url }}</a></p>
+    
+    <p>If you have any questions, feel free to contact us.</p>
+    
+    <p>Best regards,<br>
+    The Docuverify Team</p>
+</body>
+</html>

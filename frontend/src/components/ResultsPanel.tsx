@@ -1,5 +1,7 @@
+// src/components/ResultsPanel.tsx
 import { useState, useEffect, useCallback } from 'react';
-import { DocumentAnalysis, Highlight } from '@/types/analysis'; // Ensure Highlight is imported
+// Import BackendHighlight instead of your local Highlight
+import { DocumentAnalysis, BackendHighlight } from '@/types/analysis';
 import * as mammoth from 'mammoth';
 
 import {
@@ -34,11 +36,11 @@ const TextHighlightTooltip = ({
   return (
     <div
       style={{
-        position: 'fixed', // Use fixed to position relative to viewport
-        left: position.x + 10, // Offset from cursor
+        position: 'fixed',
+        left: position.x + 10,
         top: position.y + 10,
         zIndex: 100,
-        pointerEvents: 'none', // Allow clicks/hovers to pass through
+        pointerEvents: 'none',
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         color: 'white',
         padding: '6px 10px',
@@ -58,6 +60,7 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
   const [activeTab, setActiveTab] = useState('stats');
   const [loadingDoc, setLoadingDoc] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
+  const [displayContent, setDisplayContent] = useState<string>(''); // State for processed content
 
   // Tooltip state
   const [tooltipContent, setTooltipContent] = useState('');
@@ -65,42 +68,51 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
   const safeAnalysis = analysis || {
-    plagiarismScore: 0,
-    aiScore: 0,
-    originalScore: 0,
-    documentStats: {
-      wordCount: 0,
-      characterCount: 0,
-      pageCount: 0,
-      readingTime: 0
-    },
+    plagiarism_score: 0,
+    ai_score: 0,
+    originality_score: 0,
+    word_count: 0,
+    character_count: 0,
+    page_count: 0,
+    reading_time: 0,
     highlights: [],
-    fileUrl: '',
-    content: ''
+    file: '', // Backend provides file URL as 'file'
+    content: '',
+    document_code: '', // Ensure these are present for safety
+    user: null, id: 0, title: '', content_hash: '', created_at: '', recipient_email: null
   };
 
-  const fileExtension = safeAnalysis.fileUrl?.split('.').pop()?.toLowerCase();
-  const isWordDoc = ['doc', 'docx'].includes(fileExtension || '');
+  // Backend properties are snake_case. Map them to camelCase for display if needed.
+  const documentStats = {
+    wordCount: safeAnalysis.word_count || 0,
+    characterCount: safeAnalysis.character_count || 0,
+    pageCount: safeAnalysis.page_count || 0,
+    readingTime: safeAnalysis.reading_time || 0,
+  };
+
+  const fileExtension = safeAnalysis.file?.split('.').pop()?.toLowerCase() || ''; // Use safeAnalysis.file
+  const isWordDoc = ['doc', 'docx'].includes(fileExtension);
+  const isPdfDoc = fileExtension === 'pdf'; // Add PDF check
 
   const chartData = [
     {
       name: 'Original',
-      value: (100 - (safeAnalysis.plagiarismScore + safeAnalysis.aiScore)).toFixed(1),
+      value: (100 - (safeAnalysis.plagiarism_score + safeAnalysis.ai_score)).toFixed(1),
       fill: 'oklch(59.6% 0.145 163.225)'
     },
     {
       name: 'Plagiarized',
-      value: safeAnalysis.plagiarismScore.toFixed(1),
+      value: safeAnalysis.plagiarism_score.toFixed(1),
       fill: '#EF4444'
     },
     {
       name: 'AI Generated',
-      value: safeAnalysis.aiScore.toFixed(1),
+      value: safeAnalysis.ai_score.toFixed(1),
       fill: 'oklch(60% 0.15 270)'
     }
   ];
 
-  const handleMouseEnterHighlight = useCallback((e: React.MouseEvent, highlight: Highlight) => {
+  const handleMouseEnterHighlight = useCallback((e: React.MouseEvent, highlight: BackendHighlight) => {
     setTooltipContent(`${highlight.type === 'ai' ? 'AI Generated' : 'Plagiarized'}: ${highlight.confidence.toFixed(1)}% Confidence`);
     setTooltipPosition({ x: e.clientX, y: e.clientY });
     setTooltipVisible(true);
@@ -110,37 +122,28 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
     setTooltipVisible(false);
   }, []);
 
-  // Function to render text with highlights and tooltips
-  const renderHighlightedText = useCallback((text: string, highlights: DocumentAnalysis['highlights']) => {
-    if (!text) return null;
+  // Function to render text with highlights based on start/end indices
+  const renderHighlightedText = useCallback((text: string, highlights: BackendHighlight[]) => {
+    if (!text || !highlights || highlights.length === 0) return <span>{text}</span>;
 
-    const sortedHighlights = highlights
-      .map(h => ({
-        ...h,
-        charStart: Math.floor(h.position.x / 100 * text.length),
-        charEnd: Math.floor((h.position.x + h.position.width) / 100 * text.length)
-      }))
-      .sort((a, b) => a.charStart - b.charStart);
+    // Sort highlights by their start position to ensure correct rendering order
+    const sortedHighlights = [...highlights].sort((a, b) => a.start - b.start);
 
     const elements: JSX.Element[] = [];
     let lastIndex = 0;
 
     sortedHighlights.forEach((highlight, index) => {
-      // Clamp highlight indices to text length
-      const charStart = Math.max(0, Math.min(text.length, highlight.charStart));
-      const charEnd = Math.max(0, Math.min(text.length, highlight.charEnd));
-
       // Add text before the current highlight
-      if (charStart > lastIndex) {
+      if (highlight.start > lastIndex) {
         elements.push(
           <span key={`text-pre-${index}`}>
-            {text.substring(lastIndex, charStart)}
+            {text.substring(lastIndex, highlight.start)}
           </span>
         );
       }
 
       // Add the highlighted text with mouse handlers
-      const highlightText = text.substring(charStart, charEnd);
+      const highlightText = text.substring(highlight.start, highlight.end);
       const highlightClass = highlight.type === 'plagiarism'
         ? 'bg-red-200'
         : highlight.type === 'ai'
@@ -150,7 +153,7 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
       elements.push(
         <span
           key={`highlight-${index}`}
-          className={`${highlightClass} relative cursor-help`} // Add cursor-help for visual cue
+          className={`${highlightClass} relative cursor-help`}
           onMouseEnter={(e) => handleMouseEnterHighlight(e, highlight)}
           onMouseLeave={handleMouseLeaveHighlight}
         >
@@ -158,9 +161,10 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
         </span>
       );
 
-      lastIndex = charEnd;
+      lastIndex = highlight.end;
     });
 
+    // Add any remaining text after the last highlight
     if (lastIndex < text.length) {
       elements.push(
         <span key={`text-post-${sortedHighlights.length}`}>
@@ -174,43 +178,61 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
         {elements}
       </pre>
     );
-  }, [handleMouseEnterHighlight, handleMouseLeaveHighlight]); // Add dependencies for useCallback
+  }, [handleMouseEnterHighlight, handleMouseLeaveHighlight]);
 
 
-  const loadDocumentContent = async () => {
+  const loadDocumentContent = useCallback(async () => {
+    // If content is already available (from backend directly), use it
     if (safeAnalysis.content) {
+      setDisplayContent(safeAnalysis.content);
       setLoadingDoc(false);
       return;
     }
-    if (!safeAnalysis.fileUrl) return;
+    // If no content and no file URL, nothing to do
+    if (!safeAnalysis.file) { // Use safeAnalysis.file
+      setDocError('No document content or file URL available.');
+      setLoadingDoc(false);
+      return;
+    }
 
     setLoadingDoc(true);
     setDocError(null);
 
     try {
       if (isWordDoc) {
-        const response = await fetch(safeAnalysis.fileUrl);
+        // Fetch .docx file and convert to HTML
+        const response = await fetch(safeAnalysis.file);
         if (!response.ok) throw new Error('Failed to fetch document');
         const arrayBuffer = await response.arrayBuffer();
         const result = await mammoth.convertToHtml({ arrayBuffer });
+        setDisplayContent(result.value); // mammoth returns HTML in .value
+      } else if (isPdfDoc) {
+        // For PDF, you might link directly or use a PDF viewer library.
+        // For now, we'll just show a message. Full PDF text extraction
+        // is typically done on the backend.
+        setDocError('PDF preview not directly supported here. Please download the file to view.');
+        setDisplayContent(''); // Clear any previous content
+      } else { // Assume it's .txt or other text-based format
+        const response = await fetch(safeAnalysis.file);
+        if (!response.ok) throw new Error('Failed to fetch document');
+        const text = await response.text();
+        setDisplayContent(text);
       }
     } catch (error) {
       console.error('Document load error:', error);
       setDocError(error instanceof Error ? error.message : 'Document load failed');
+      setDisplayContent('');
     } finally {
       setLoadingDoc(false);
     }
-  };
+  }, [safeAnalysis.content, safeAnalysis.file, isWordDoc, isPdfDoc]);
+
 
   useEffect(() => {
-    let isMounted = true;
-    if (activeTab === 'text' && (safeAnalysis.fileUrl || safeAnalysis.content)) {
+    if (activeTab === 'text') {
       loadDocumentContent();
     }
-    return () => {
-      isMounted = false;
-    };
-  }, [activeTab, safeAnalysis.fileUrl, safeAnalysis.content, loadDocumentContent]);
+  }, [activeTab, loadDocumentContent]);
 
 
   return (
@@ -222,24 +244,23 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
         </TabsList>
 
         <TabsContent value="stats">
-          {/* Statistics Tab content remains the same */}
           <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard
                 title="Original Content"
-                value={`${(safeAnalysis.originalScore).toFixed(2)}%`}
+                value={`${(safeAnalysis.originality_score).toFixed(2)}%`}
                 colorClass="text-green-600"
                 description="Unique content percentage"
               />
               <StatCard
                 title="Plagiarized Content"
-                value={`${safeAnalysis.plagiarismScore.toFixed(2)}%`}
+                value={`${safeAnalysis.plagiarism_score.toFixed(2)}%`}
                 colorClass="text-red-600"
                 description="Matched with existing sources"
               />
               <StatCard
                 title="AI Generated"
-                value={`${safeAnalysis.aiScore.toFixed(2)}%`}
+                value={`${safeAnalysis.ai_score.toFixed(2)}%`}
                 colorClass="text-yellow-600"
                 description="Probability of AI generation"
               />
@@ -267,8 +288,8 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
                 <h3 className="text-xl font-semibold mb-4">Risk Scores</h3>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={[
-                    { name: 'Plagiarism', score: safeAnalysis.plagiarismScore },
-                    { name: 'AI', score: safeAnalysis.aiScore }
+                    { name: 'Plagiarism', score: safeAnalysis.plagiarism_score },
+                    { name: 'AI', score: safeAnalysis.ai_score }
                   ]}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
@@ -283,22 +304,22 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard
                 title="Word Count"
-                value={safeAnalysis.documentStats.wordCount.toLocaleString()}
+                value={documentStats.wordCount.toLocaleString()}
                 description="Total words in document"
               />
               <StatCard
                 title="Characters"
-                value={safeAnalysis.documentStats.characterCount.toLocaleString()}
+                value={documentStats.characterCount.toLocaleString()}
                 description="Including spaces"
               />
               <StatCard
                 title="Pages"
-                value={safeAnalysis.documentStats.pageCount.toString()}
+                value={documentStats.pageCount.toString()}
                 description="Approximate count"
               />
               <StatCard
                 title="Reading Time"
-                value={`${safeAnalysis.documentStats.readingTime}m`}
+                value={`${documentStats.readingTime}m`}
                 description="Average reading time"
               />
             </div>
@@ -313,19 +334,24 @@ const ResultsPanel = ({ analysis }: { analysis?: DocumentAnalysis }) => {
                 {docError}
               </div>
             )}
-            {!loadingDoc && !docError && safeAnalysis.content ? (
+            {!loadingDoc && !docError && displayContent ? (
               <div
-                className="border rounded-lg min-h-[400px] max-h-[80vh] overflow-y-auto" // Added max-h and overflow-y-auto
-                style={{ resize: 'vertical' }} // Optional: Allow user to resize height
+                className="border rounded-lg min-h-[400px] max-h-[80vh] overflow-y-auto"
+                style={{ resize: 'vertical' }}
               >
-                {renderHighlightedText(safeAnalysis.content, safeAnalysis.highlights)}
+                {renderHighlightedText(displayContent, safeAnalysis.highlights)}
               </div>
             ) : (
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-gray-500">No document content available for display or highlighting.</p>
                 <p className="text-gray-500 mt-2">
-                  Please ensure the document file is valid and the backend returns its `content`.
+                  Please ensure the document file is valid and the backend returns its `content` or a `file` URL.
                 </p>
+                {safeAnalysis.file && (
+                  <a href={safeAnalysis.file} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline">
+                    Download original file
+                  </a>
+                )}
               </div>
             )}
           </div>

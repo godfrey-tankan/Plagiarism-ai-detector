@@ -5,10 +5,11 @@ from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 
 class DocumentStatsSerializer(serializers.Serializer):
-    word_count = serializers.IntegerField(source='word_count')
-    character_count = serializers.IntegerField(source='character_count')
-    page_count = serializers.IntegerField(source='page_count')
-    reading_time = serializers.IntegerField(source='reading_time')
+    word_count = serializers.IntegerField()
+    character_count = serializers.IntegerField()
+    page_count = serializers.IntegerField()
+    reading_time = serializers.IntegerField()
+
 
 class AIMarkerSerializer(serializers.Serializer):
     type = serializers.CharField()
@@ -25,21 +26,25 @@ class TextAnalysisSerializer(serializers.Serializer):
     original_content = serializers.FloatField()
     plagiarized_content = serializers.FloatField()
     ai_generated_content = serializers.FloatField()
-
 class DocumentSerializer(serializers.ModelSerializer):
     fileUrl = serializers.SerializerMethodField()
     highlights = serializers.SerializerMethodField()
-    original_score = serializers.SerializerMethodField()
+    originality_score = serializers.SerializerMethodField()
     documentStats = DocumentStatsSerializer(source='*', read_only=True)
-
+    
+    # Expose content and document_code for read operations
+    content = serializers.CharField(read_only=True)
+    document_code = serializers.CharField(read_only=True) # Expose document_code
 
     class Meta:
-        model = Document
+        model = Document 
         fields = [
-            'id', 'fileUrl', 'content', 'plagiarism_score', 'ai_score',
-            'original_score', 'documentStats', 'highlights'
+            'id', 'fileUrl', 'content', 'content_hash', 'plagiarism_score', 'ai_score', 
+            'originality_score', 'documentStats', 'highlights', 'document_code', 
+            'title', 'created_at', 'recipient_email'
         ]
-        read_only_fields = ['user', 'content_hash', 'content']
+        read_only_fields = ['user', 'plagiarism_score', 'ai_score', 'originality_score',
+                            'highlights', 'documentStats', 'document_code', 'created_at']
 
 
     def get_fileUrl(self, obj):
@@ -58,19 +63,35 @@ class DocumentSerializer(serializers.ModelSerializer):
     def get_highlights(self, obj):
         return obj.highlights
 
-    def get_original_score(self, obj):
+    def get_originality_score(self, obj):
         return round(max(0.0, 100.0 - (obj.plagiarism_score + obj.ai_score)), 1)
 
 
+
 class DocumentHistorySerializer(serializers.ModelSerializer):
-    document = DocumentSerializer(read_only=True)
+    # Ensure DocumentSerializer used here includes necessary fields like 'document_code'
+    document = DocumentSerializer(read_only=True) # Use updated DocumentSerializer
     document_name = serializers.SerializerMethodField()
+    
+    # Ensure stats are included in history records as well
+    documentStats = DocumentStatsSerializer(source='*', read_only=True) 
+
 
     class Meta:
         model = DocumentHistory
-        fields = ['id', 'document', 'created_at', 'plagiarism_score', 'ai_score', 'highlights', 'content', 'document_name']
+        fields = [
+            'id', 'document', 'created_at', 'plagiarism_score', 'ai_score',
+            'originality_score', 'highlights', 'content', 'document_name',
+            'documentStats' 
+        ]
+        read_only_fields = ['document', 'created_at', 'highlights', 'content'] 
 
     def get_document_name(self, obj):
-        if obj.document and obj.document.file:
-            return obj.document.file.name.split("/")[-1]
+        if obj.document and obj.document.title: 
+            return obj.document.title
+        elif obj.document and obj.document.file:
+            return obj.document.file.name.split("/")[-1] 
         return None
+
+    def get_originality_score(self, obj):
+        return round(max(0.0, 100.0 - (obj.plagiarism_score + obj.ai_score)), 1)

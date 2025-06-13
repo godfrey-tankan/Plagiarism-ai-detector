@@ -1,221 +1,173 @@
-# viewset.py (No significant changes needed, but ensure it's up-to-date with previous fixes)
-
-from rest_framework.views import APIView
-from rest_framework import viewsets
+# documents/viewsets.py
+import hashlib
+import logging
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.exceptions import ValidationError
-
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from django.db import transaction
+from django.core.mail import send_mail
+from django.conf import settings 
 from .models import Document, DocumentHistory
 from .serializers import DocumentSerializer, DocumentHistorySerializer
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework.permissions import IsAuthenticated
-
 from .utils import (
     extract_text_from_file,
-    analyze_text, 
-    check_ai_probability,
-    calculate_document_stats
+    analyze_text_for_plagiarism_and_ai 
 )
 
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
-import hashlib
-import re
-import logging
 
 logger = logging.getLogger(__name__)
 
-def calculate_content_hash(text):
-    return hashlib.md5(text.encode('utf-8')).hexdigest()
-
-
-@method_decorator(csrf_exempt, name='dispatch')
-class AnalyzeDocumentView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            # 1. file in request?
-            if 'document' not in request.FILES:
-                return Response({"error": "No document provided"}, status=400)
-
-            file = request.FILES['document']
-            # 2. size limit
-            if file.size > 10 * 1024 * 1024:
-                return Response({"error": "File too large (max 10MB)"}, status=400)
-
-            # 3. extract & basic validation
-            text = extract_text_from_file(file).strip()
-            logger.info(f"[{request.user}] extracted {len(text)} chars from {file.name}")
-
-            words = re.findall(r'\w+', text)
-            if len(words) < 10 or len(text) < 200: 
-                return Response({"error": "Document too short for analysis"}, status=400)
-
-            # 4. dedupe by hash
-            content_hash = calculate_content_hash(text)
-            existing = Document.objects.filter(content_hash=content_hash).first()
-
-            # 5. plagiarism & AI
-            plag_results = analyze_text(content_hash, text)
-            p_score = min(plag_results['score'], 100.0)
-
-            # check_ai_probability now uses the improved AI detection model/logic
-            ai_results = check_ai_probability(text, plag_results['highlights'], plagiarism_score=p_score)
-            ai_score = min(ai_results['score'], 100.0 - p_score)
-
-            # 6. original
-            orig = round(max(0.0, 100.0 - (p_score + ai_score)), 1)
-
-            p_score = round(p_score, 1)
-            ai_score = round(ai_score, 1)
-
-            # 7. persist
-            stats = calculate_document_stats(text)
-            highlights = plag_results['highlights'] + ai_results['highlights']
-
-            if existing:
-                # If existing document belongs to another user (and current user isn't superuser),
-                if existing.user != request.user and not request.user.is_superuser:
-                    # Return existing document's scores and content as if it was analyzed
-                    result = {
-                        'id': existing.id,
-                        'fileUrl': existing.file.url if existing.file else None,
-                        'plagiarismScore': existing.plagiarism_score,
-                        'aiScore': existing.ai_score,
-                        'originalScore': round(max(0.0, 100.0 - (existing.plagiarism_score + existing.ai_score)), 1),
-                        'documentStats': {
-                            'wordCount': existing.word_count,
-                            'characterCount': existing.character_count,
-                            'pageCount': existing.page_count,
-                            'readingTime': existing.reading_time
-                        },
-                        'highlights': existing.highlights,
-                        'content': existing.content
-                    }
-                    logger.info(f"[{request.user}] accessed existing document {existing.id} by another user.")
-                    return Response(result, status=status.HTTP_200_OK)
-                
-                # If it's the current user's document or superuser, update it
-                existing.plagiarism_score = p_score
-                existing.ai_score = ai_score
-                existing._highlights = highlights
-                existing.word_count = stats['word_count']
-                existing.character_count = stats['character_count']
-                existing.page_count = stats['page_count']
-                existing.reading_time = stats['reading_time']
-                existing.save()
-                doc = existing
-                logger.info(f"[{request.user}] updated existing document {doc.id}")
-            else:
-                doc = Document.objects.create(
-                    user=request.user,
-                    content=text,
-                    content_hash=content_hash,
-                    plagiarism_score=p_score,
-                    ai_score=ai_score,
-                    _highlights=highlights,
-                    file=file,
-                    **stats
-                )
-                logger.info(f"[{request.user}] created new document {doc.id}")
-            
-            # Create DocumentHistory
-            try:
-                DocumentHistory.objects.create(
-                    document=doc,
-                    content=doc.content,
-                    plagiarism_score=doc.plagiarism_score,
-                    ai_score=doc.ai_score,
-                    highlights=doc.highlights 
-                )
-                logger.info(f"Created DocumentHistory for document {doc.id}")
-            except Exception as e:
-                logger.error(f"Failed to create DocumentHistory for document {doc.id}: {e}")
-
-            # 8. response
-            result = {
-                'id': doc.id,
-                'fileUrl': doc.file.url if doc.file else None,
-                'plagiarismScore': p_score,
-                'aiScore': ai_score,
-                'originalScore': orig, 
-                'documentStats': {
-                    'wordCount': doc.word_count,
-                    'characterCount': doc.character_count,
-                    'pageCount': doc.page_count,
-                    'readingTime': doc.reading_time
-                },
-                'highlights': doc.highlights, 
-                'content': doc.content 
-            }
-            return Response(result, status=200)
-
-        except ValidationError as e:
-            logger.error(f"Validation error in AnalyzeDocumentView: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except ValueError as e: 
-            logger.error(f"Document processing error: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.exception("AnalyzeDocumentView unexpected error")
-            return Response({"error": "Internal server error. Please try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@method_decorator(csrf_exempt, name='dispatch')
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedOrReadOnly] 
 
-    def perform_create(self, serializer):
-        file = self.request.FILES.get('file')
-        if file:
-            text = extract_text_from_file(file)
-            content_hash = calculate_content_hash(text)
+    def get_queryset(self):
+        if self.request.user.is_authenticated:
+            return Document.objects.filter(user=self.request.user).order_by('-created_at')
+        return Document.objects.none()
 
-            existing = Document.objects.filter(
-                user=self.request.user,
-                content_hash=content_hash
-            ).first()
+    @transaction.atomic 
+    def create(self, request, *args, **kwargs):
+        file = request.FILES.get('file')
+        recipient_email = request.data.get('recipient_email')
+        send_report_to_other = request.data.get('send_report_to_other', 'false').lower() == 'true'
 
-            if existing:
-                # Update scores if re-uploaded, using the comprehensive analyze_text and check_ai_probability
-                plag_results = analyze_text(content_hash, text)
-                ai_results = check_ai_probability(text, plag_results['highlights'], plagiarism_score=plag_results['score'])
-                
-                existing.plagiarism_score = plag_results['score']
-                existing.ai_score = ai_results['score']
-                existing._highlights = plag_results['highlights'] + ai_results['highlights']
-                existing.save()
-                return
+        if not file:
+            return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
 
-            stats = calculate_document_stats(text)
-            serializer.save(
-                user=self.request.user,
-                content=text,
-                content_hash=content_hash,
-                plagiarism_score=0.0,
-                ai_score=0.0,
-                _highlights=[],
-                **stats
+        # 1. File Size Check 
+        if file.size > 10 * 1024 * 1024:
+            return Response({"error": "File too large (max 10MB)"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 2. Extract Text and Calculate Hash
+            file_content = extract_text_from_file(file).strip()
+            content_hash = hashlib.sha256(file_content.encode('utf-8')).hexdigest()
+            file_name = file.name
+            user = request.user if request.user.is_authenticated else None
+
+            # 3. Basic Content Validation 
+            words = file_content.split() # Simple split for word count
+            if len(words) < 10 or len(file_content) < 200:
+                return Response({"error": "Document too short for analysis (min 10 words, 200 characters)."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # 4. Check for Existing Document (Deduplication)
+            existing_document = None
+            if user:
+                # Prioritize existing document for the current user
+                existing_document = Document.objects.filter(user=user, content_hash=content_hash).first()
+            if not existing_document:
+                # If no user-specific document, check for a public document (user=None)
+                existing_document = Document.objects.filter(user__isnull=True, content_hash=content_hash).first()
+
+
+            if existing_document:
+                logger.info(f"Existing document found for hash {content_hash} (ID: {existing_document.id}). Updating/Adding history.")
+                document = existing_document
+                document.title = file_name
+                document.file = file
+                document.content = file_content 
+
+            else:
+                logger.info(f"Creating new document for hash {content_hash}.")
+                document = Document(
+                    user=user,
+                    title=file_name,
+                    file=file,
+                    content=file_content,
+                    content_hash=content_hash,
+                    recipient_email=recipient_email if send_report_to_other else None 
+                )
+                document.save() 
+
+            plagiarism_score, ai_score, originality_score, highlights, stats = \
+                analyze_text_for_plagiarism_and_ai(file_content)
+
+            document.plagiarism_score = plagiarism_score
+            document.ai_score = ai_score
+            document.originality_score = originality_score
+            document.highlights = highlights 
+            document.word_count = stats['word_count']
+            document.character_count = stats['character_count']
+            document.page_count = stats['page_count']
+            document.reading_time = stats['reading_time']
+            
+            document.save()
+            logger.info(f"Document {document.id} analysis saved: Plag={plagiarism_score}%, AI={ai_score}%, Originality={originality_score}%")
+
+            DocumentHistory.objects.create(
+                document=document,
+                content=file_content, 
+                plagiarism_score=plagiarism_score,
+                ai_score=ai_score,
+                originality_score=originality_score,
+                highlights=highlights,
+                word_count = stats['word_count'],
+                character_count = stats['character_count'],
+                page_count = stats['page_count'],
+                reading_time = stats['reading_time'],
             )
+            logger.info(f"Created DocumentHistory record for document {document.id}")
 
+            # 8. Send Analysis Report Email
+            if send_report_to_other and recipient_email:
+                self._send_analysis_report_email(document.document_code, recipient_email)
+            elif user and not send_report_to_other: 
+                self._send_analysis_report_email(document.document_code, user.email)
 
-    @action(detail=False, methods=['get'], url_path='test-csrf')
-    def test_csrf(self, request):
-        return Response({"message": "CSRF exemption works!"}, status=status.HTTP_200_OK)
+            # 9. Return Response
+            serializer = self.get_serializer(document)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+        except UnicodeDecodeError:
+            return Response({"error": "Could not decode file content as UTF-8. Please upload a plain text or properly encoded document."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception("Error during document analysis or saving in DocumentViewSet.create") 
+            return Response({"error": f"An unexpected error occurred: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@method_decorator(csrf_exempt, name='dispatch')
-class UserDocumentHistoryView(APIView):
-    permission_classes = [IsAuthenticated]
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def my_documents(self, request):
+        """
+        Retrieves all documents uploaded by the authenticated user.
+        """
+        documents = self.get_queryset() 
+        serializer = self.get_serializer(documents, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def get(self, request):
-        histories = DocumentHistory.objects.filter(document__user=request.user).select_related('document')
-        serializer = DocumentHistorySerializer(histories, many=True)
-        return Response(serializer.data)
+    @action(detail=False, methods=['get'])
+    def check_document_history(self, request):
+        """
+        Retrieves document details and history for a given document_code.
+        Can be accessed by anyone with the code.
+        """
+        document_code = request.query_params.get('document_code', None)
+        if not document_code:
+            return Response({"error": "Document code is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            document = Document.objects.prefetch_related('history_records').get(document_code=document_code)
+            serializer = self.get_serializer(document)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Document.DoesNotExist:
+            return Response({"error": "Document not found with the provided code."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error checking document history for {document_code}: {e}", exc_info=True)
+            return Response({"error": "An error occurred while retrieving document history."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _send_analysis_report_email(self, document_code, recipient_email):
+        subject = f"Plagiarism and AI Analysis Report for Document Code: {document_code}"
+        report_url = f"{settings.FRONTEND_URL}/history?code={document_code}" # Assuming you set FRONTEND_URL in Django settings
+        message = (f"Dear User,\n\n"
+                f"Your document (Code: {document_code}) has been analyzed.\n"
+                f"You can view the full report by clicking here: {report_url}\n\n"
+                f"Thank you,\nYour Plagiarism Checker Team")
+        
+        # Ensure DEFAULT_FROM_EMAIL is set in your Django settings.py
+        from_email = settings.DEFAULT_FROM_EMAIL 
+        try:
+            send_mail(subject, message, from_email, [recipient_email], fail_silently=False)
+            logger.info(f"Analysis report sent to {recipient_email} for document {document_code}")
+        except Exception as e:
+            logger.error(f"Failed to send email report to {recipient_email} for document {document_code}: {e}")
