@@ -1,10 +1,8 @@
----
 
 # 📄 Docuverify
 
 **Docuverify** is a powerful **plagiarism and AI content detection platform** built to help users manage and analyze documents with precision and ease.
 
----
 
 ## 🔍 Project Description
 
